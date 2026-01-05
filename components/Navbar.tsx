@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import clsx from 'clsx';
 
 import { BrandMark } from './BrandMark';
@@ -106,13 +106,7 @@ export const Navbar = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const navigationLinks = useMemo(() => {
-    if (user?.role !== 'ADMIN') {
-      return links.filter((link) => link.href !== '/integrations');
-    }
-
-    return links;
-  }, [user?.role]);
+  const navigationLinks = links;
 
   const handleLogout = () => {
     if (isLoggingOut) return;

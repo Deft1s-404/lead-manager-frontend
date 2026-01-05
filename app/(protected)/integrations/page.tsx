@@ -7,7 +7,6 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Loading } from '../../../components/Loading';
 import { Modal } from '../../../components/Modal';
 import api from '../../../lib/api';
-import { useRoleGuard } from '../../../hooks/useRoleGuard';
 import { useAuth } from '../../../hooks/useAuth';
 
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -152,8 +151,7 @@ const EVOLUTION_FIRST_POLL_DELAY = 30000;
 export default function IntegrationsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthorized, loading: authLoading } = useRoleGuard(['ADMIN']);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [googleError, setGoogleError] = useState<string | null>(null);
@@ -339,7 +337,7 @@ export default function IntegrationsPage() {
   
 
   useEffect(() => {
-    if (!isAuthorized || authLoading) {
+    if (authLoading || !user) {
       return;
     }
 
@@ -347,10 +345,10 @@ export default function IntegrationsPage() {
     void loadPaypalStatus();
     void loadMetaStatus();
     void loadEvolutionStatus();
-  }, [authLoading, isAuthorized, loadGoogleStatus, loadPaypalStatus, loadMetaStatus, loadEvolutionStatus]);
+  }, [authLoading, user, loadGoogleStatus, loadPaypalStatus, loadMetaStatus, loadEvolutionStatus]);
 
   useEffect(() => {
-     if (!isAuthorized || authLoading) {
+    if (authLoading || !user) {
       return;
     }
 
@@ -394,10 +392,10 @@ export default function IntegrationsPage() {
     return () => clearTimeout(timeout);
   }, [
     authLoading,
+    user,
     statusParam,
     messageParam,
     integrationParam,
-    isAuthorized,
     router,
     loadGoogleStatus,
     loadPaypalStatus,
@@ -551,7 +549,7 @@ export default function IntegrationsPage() {
 
   // Register global cleanup once both stop callbacks exist
   useEffect(() => {
-    if (!isAuthorized || authLoading) {
+    if (authLoading || !user) {
       return;
     }
 
@@ -559,7 +557,7 @@ export default function IntegrationsPage() {
       stopEvolutionPolling();
       clearEvolutionModalAutoClose();
     };
-  }, [authLoading, clearEvolutionModalAutoClose, isAuthorized, stopEvolutionPolling]);
+  }, [authLoading, user, clearEvolutionModalAutoClose, stopEvolutionPolling]);
 
   
 
@@ -916,7 +914,7 @@ export default function IntegrationsPage() {
   const evolutionStatus = evolutionSession?.status ?? null;
 
   useEffect(() => {
-    if (!isAuthorized || authLoading) {
+    if (authLoading || !user) {
       return;
     }
 
@@ -954,10 +952,10 @@ export default function IntegrationsPage() {
     };
   }, [
     authLoading,
+    user,
     evolutionInstanceId,
     evolutionStatus,
     isEvolutionModalOpen,
-    isAuthorized,
     pollEvolutionStatus,
     stopEvolutionPolling
   ]);
@@ -965,7 +963,7 @@ export default function IntegrationsPage() {
   
 
   useEffect(() => {
-     if (!isAuthorized || authLoading) {
+    if (authLoading || !user) {
       return;
     }
     const currentStatus = evolutionSession?.status ?? null;
@@ -990,14 +988,15 @@ export default function IntegrationsPage() {
   }, [
     clearEvolutionModalAutoClose,
     authLoading,
+    user,
     evolutionSession?.status,
     loadEvolutionStatus,
-     isAuthorized,
     stopEvolutionPolling
   ]);
 
   const dismissFeedback = () => setFeedback(null);
-if (authLoading) {
+
+  if (authLoading) {
     return (
       <div className="flex justify-center py-10">
         <Loading />
@@ -1005,7 +1004,7 @@ if (authLoading) {
     );
   }
 
-  if (!isAuthorized) {
+  if (!user) {
     return null;
   }
   const evolutionButtonLabel = (() => {
@@ -1755,5 +1754,3 @@ if (authLoading) {
     </div>
   );
 }
-
-

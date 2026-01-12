@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -16,7 +16,8 @@ type IconName =
   | 'calendar'
   | 'megaphone'
   | 'puzzle'
-  | 'chart';
+  | 'chart'
+  | 'sparkles';
 
 type LinkItem = { href: string; label: string; icon: IconName };
 
@@ -25,10 +26,12 @@ const links: LinkItem[] = [
   // { href: '/clients', label: 'Clientes', icon: 'users' },
   // { href: '/alunos', label: 'Alunos', icon: 'users' },
   { href: '/leads', label: 'Leads', icon: 'funnel' },
+  { href: '/sellers', label: 'Vendedores', icon: 'users' },
   // { href: '/course-leads', label: 'Leads Curso', icon: 'funnel' },
   { href: '/appointments', label: 'Video Chamadas', icon: 'calendar' },
   // { href: '/campaigns', label: 'Campanhas', icon: 'megaphone' },
   { href: '/integrations', label: 'Integrações', icon: 'puzzle' },
+  { href: '/agent-prompt', label: 'Prompt do agente', icon: 'sparkles' },
   { href: '/reports', label: 'Relatórios', icon: 'chart' }
 ];
 
@@ -93,6 +96,13 @@ function Icon({ name, className }: { name: IconName; className?: string }) {
       return (
         <svg {...common}>
           <path d="M4 20V6M10 20V10M16 20v-7M21 20H3" />
+        </svg>
+      );
+    case 'sparkles':
+      return (
+        <svg {...common}>
+          <path d="M12 3v4M12 17v4M5.5 5.5l2.5 2.5M16 16l2.5 2.5M3 12h4M17 12h4M5.5 18.5l2.5-2.5M16 8l2.5-2.5" />
+          <circle cx="12" cy="12" r="3" />
         </svg>
       );
     default:
@@ -248,3 +258,4 @@ export const Navbar = () => {
     </>
   );
 };
+

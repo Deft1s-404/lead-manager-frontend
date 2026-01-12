@@ -15,7 +15,8 @@ const normalizeScopes = (value?: string) =>
   value
     ?.split(/[,\s]+/)
     .filter(Boolean)
-    .join(' ') ?? 'https://www.googleapis.com/auth/calendar';
+    .join(' ') ??
+  'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email';
 
 const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '';
 const fallbackRedirectUri =
@@ -156,6 +157,7 @@ export default function IntegrationsPage() {
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGoogleDisconnecting, setIsGoogleDisconnecting] = useState(false);
   const [googleStatusLoading, setGoogleStatusLoading] = useState(true);
   const [googleConnection, setGoogleConnection] = useState<GoogleConnectionStatus | null>(null);
   const [paypalError, setPaypalError] = useState<string | null>(null);
@@ -441,6 +443,30 @@ export default function IntegrationsPage() {
       setIsGoogleLoading(false);
     }
   }, [hasGoogleConfig, scopes]);
+
+  const handleGoogleDisconnect = useCallback(async () => {
+    if (isGoogleDisconnecting) {
+      return;
+    }
+
+    setGoogleError(null);
+    setFeedback(null);
+    setIsGoogleDisconnecting(true);
+
+    try {
+      await api.delete('/google/oauth/disconnect');
+      await loadGoogleStatus();
+      setFeedback({
+        type: 'success',
+        message: 'Google agenda removida com sucesso.'
+      });
+    } catch (error) {
+      console.error(error);
+      setGoogleError('Nao foi possivel remover a agenda. Tente novamente.');
+    } finally {
+      setIsGoogleDisconnecting(false);
+    }
+  }, [isGoogleDisconnecting, loadGoogleStatus]);
   const handlePaypalConnect = useCallback(async () => {
     setPaypalError(null);
     setFeedback(null);
@@ -1083,21 +1109,6 @@ export default function IntegrationsPage() {
           Conecte a agenda do Google e o WhatsApp via Evolution para automatizar o atendimento.
         </p>
       </header>
-      {user?.apiKey && (
-        <div className="rounded-2xl border border-dashed border-primary/30 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-700">Chave de integração (tenant)</h2>
-          <p className="mt-1 text-xs text-gray-500">
-            Envie este valor no cabeçalho{' '}
-            <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-700">
-              x-tenant-key
-            </code>{' '}
-            ao utilizar as rotas públicas (n8n, formulários etc.).
-          </p>
-          <code className="mt-3 block select-all rounded bg-slate-50 px-3 py-2 font-mono text-sm text-slate-800">
-            {user.apiKey}
-          </code>
-        </div>
-      )}
       {feedback && (
         <div
           className={`flex items-start justify-between rounded-xl border px-4 py-3 text-sm ${
@@ -1127,17 +1138,29 @@ export default function IntegrationsPage() {
               agenda autorizada.
             </p>
           </div>
-          <button
-            onClick={handleGoogleConnect}
-            disabled={!hasGoogleConfig || isGoogleLoading}
-            className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
-            {isGoogleLoading
-              ? 'Redirecionando...'
-              : googleConnection?.connected
-              ? 'Reconectar Google Calendar'
-              : 'Conectar Google Calendar'}
-          </button>
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+            <button
+              onClick={handleGoogleConnect}
+              disabled={!hasGoogleConfig || isGoogleLoading || isGoogleDisconnecting}
+              className="min-w-[12rem] rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              {isGoogleLoading
+                ? 'Redirecionando...'
+                : googleConnection?.connected
+                ? 'Reconectar Google Calendar'
+                : 'Conectar Google Calendar'}
+            </button>
+            {googleConnection?.connected && (
+              <button
+                type="button"
+                onClick={() => void handleGoogleDisconnect()}
+                disabled={isGoogleDisconnecting}
+                className="min-w-[12rem] rounded-lg border border-red-200 px-5 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+              >
+                {isGoogleDisconnecting ? 'Removendo...' : 'Remover agenda'}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
@@ -1145,21 +1168,7 @@ export default function IntegrationsPage() {
             <span>Verificando status da integracao...</span>
           ) : googleConnection?.connected ? (
             <div className="flex flex-col gap-1">
-              <strong className="text-emerald-700">Agenda conectada</strong>
-              {googleConnection.email && <span>Conta: {googleConnection.email}</span>}
-              {googleConnection.expiresAt && (
-                <span>
-                  Token expira em:{' '}
-                  {new Date(googleConnection.expiresAt).toLocaleString('pt-BR', {
-                    dateStyle: 'short',
-                    timeStyle: 'short'
-                  })}
-                </span>
-              )}
-              <span>
-                Renovacao automatica:{' '}
-                {googleConnection.hasRefreshToken ? 'ativada' : 'nao disponivel'}
-              </span>
+              <strong className="text-emerald-700">Google agenda conectada!</strong>
             </div>
           ) : (
             <span>{'Nenhuma conta Google vinculada. Clique em "Conectar Google Calendar".'}</span>

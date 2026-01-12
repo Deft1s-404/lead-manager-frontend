@@ -183,7 +183,7 @@ export default function AppointmentsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-900">Videochamadas</h1>
+          <h1 className="text-3xl font-semibold text-slate-900">Video chamadas</h1>
           <p className="text-sm text-gray-500">Agende e acompanhe as chamadas dos leads.</p>
         </div>
         <div className="flex gap-3">

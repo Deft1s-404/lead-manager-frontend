@@ -61,6 +61,28 @@ export interface Lead {
   updatedAt?: string;
 }
 
+export interface Seller {
+  id: string;
+  name: string;
+  email?: string | null;
+  contactNumber?: string | null;
+  availabilityStartDay?: WeekDay | null;
+  availabilityEndDay?: WeekDay | null;
+  availabilityStartTime?: string | null;
+  availabilityEndTime?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WeekDay =
+  | 'SUNDAY'
+  | 'MONDAY'
+  | 'TUESDAY'
+  | 'WEDNESDAY'
+  | 'THURSDAY'
+  | 'FRIDAY'
+  | 'SATURDAY';
+
 export interface Appointment {
   id: string;
   leadId: string;

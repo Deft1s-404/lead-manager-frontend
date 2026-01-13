@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
@@ -13,6 +13,8 @@ type AppointmentStatusOption = 'AGENDADA' | 'NO_SHOW';
 interface AppointmentsResponse {
   data: Appointment[];
   total: number;
+  page: number;
+  limit: number;
 }
 
 interface LeadsResponse {
@@ -24,6 +26,7 @@ const statusLabels: Record<AppointmentStatusOption, string> = {
   AGENDADA: 'Agendada',
   NO_SHOW: 'Nao compareceu'
 };
+const PAGE_SIZE = 20;
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString('pt-BR', {
@@ -39,6 +42,7 @@ export default function AppointmentsPage() {
   const [leadSearch, setLeadSearch] = useState('');
   const [isLeadsLoading, setIsLeadsLoading] = useState(true);
   const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedStatus, setSelectedStatus] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,25 +57,49 @@ export default function AppointmentsPage() {
   });
   const [appointmentPendingDeletion, setAppointmentPendingDeletion] = useState<Appointment | null>(null);
   const [isDeletingAppointment, setIsDeletingAppointment] = useState(false);
+  const hasFetchedInitial = useRef(false);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
+  const effectivePage = Math.min(currentPage, totalPages);
+  const showingFrom = total === 0 ? 0 : (effectivePage - 1) * PAGE_SIZE + 1;
+  const showingTo = total === 0 ? 0 : Math.min(effectivePage * PAGE_SIZE, total);
+  const canGoPrevious = effectivePage > 1;
+  const canGoNext = effectivePage < totalPages && total > 0;
+  const hasFilters = Boolean(selectedStatus);
 
-  const fetchAppointments = async (statusFilter?: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const params: Record<string, unknown> = { limit: 100 };
-      if (statusFilter) {
-        params.status = statusFilter;
+  const fetchAppointments = useCallback(
+    async (options?: { page?: number; status?: string }) => {
+      const pageToFetch = options?.page ?? currentPage;
+      const statusFilter = options?.status ?? selectedStatus;
+      const previousPage = currentPage;
+
+      if (pageToFetch !== currentPage) {
+        setCurrentPage(pageToFetch);
       }
-      const response = await api.get<AppointmentsResponse>('/appointments', { params });
-      setAppointments(response.data.data);
-      setTotal(response.data.total);
-    } catch (e) {
-      console.error(e);
-      setError('Nao foi possivel carregar as calls.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
+      try {
+        setIsLoading(true);
+        setError(null);
+        const params: Record<string, unknown> = {
+          limit: PAGE_SIZE,
+          page: pageToFetch
+        };
+        if (statusFilter) {
+          params.status = statusFilter;
+        }
+        const response = await api.get<AppointmentsResponse>('/appointments', { params });
+        setAppointments(response.data.data);
+        setTotal(response.data.total);
+        setCurrentPage(response.data.page ?? pageToFetch);
+      } catch (e) {
+        console.error(e);
+        setError('Nao foi possivel carregar as calls.');
+        setCurrentPage(previousPage);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentPage, selectedStatus]
+  );
 
   const fetchLeads = async (searchTerm?: string) => {
     try {
@@ -89,9 +117,13 @@ export default function AppointmentsPage() {
   };
 
   useEffect(() => {
+    if (hasFetchedInitial.current) {
+      return;
+    }
+    hasFetchedInitial.current = true;
     fetchAppointments();
     fetchLeads();
-  }, []);
+  }, [fetchAppointments]);
 
   const isoToLocalInput = (iso: string) => {
     const d = new Date(iso);
@@ -140,7 +172,7 @@ export default function AppointmentsPage() {
         await api.post('/appointments', payload);
       }
       setIsModalOpen(false);
-      await fetchAppointments(selectedStatus);
+      await fetchAppointments({ page: currentPage, status: selectedStatus });
     } catch (e) {
       console.error(e);
       setError('Erro ao salvar call.');
@@ -159,7 +191,7 @@ export default function AppointmentsPage() {
       setIsDeletingAppointment(true);
       await api.delete(`/appointments/${appointmentPendingDeletion.id}`);
       setAppointmentPendingDeletion(null);
-      await fetchAppointments(selectedStatus);
+      await fetchAppointments({ page: currentPage, status: selectedStatus });
     } catch (e) {
       console.error(e);
       setError('Erro ao remover call.');
@@ -179,6 +211,27 @@ export default function AppointmentsPage() {
     await fetchLeads(leadSearch.trim() || undefined);
   };
 
+  const handlePageChange = (page: number) => {
+    if (page < 1 || page > totalPages || page === currentPage || isLoading) {
+      return;
+    }
+    fetchAppointments({ page });
+  };
+
+  const handlePreviousPage = () => {
+    if (!canGoPrevious) {
+      return;
+    }
+    handlePageChange(currentPage - 1);
+  };
+
+  const handleNextPage = () => {
+    if (!canGoNext) {
+      return;
+    }
+    handlePageChange(currentPage + 1);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -192,7 +245,7 @@ export default function AppointmentsPage() {
             onChange={(event) => {
               const status = event.target.value;
               setSelectedStatus(status);
-              fetchAppointments(status || undefined);
+              fetchAppointments({ page: 1, status });
             }}
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
           >
@@ -294,7 +347,38 @@ export default function AppointmentsPage() {
         </table>
       </div>
 
-      <p className="text-xs text-gray-400">Total de calls: {total}</p>
+      <div className="flex flex-col items-start justify-between gap-3 border-t border-gray-100 pt-4 text-xs text-gray-500 sm:flex-row sm:items-center sm:text-sm">
+        <p>
+          {isLoading
+            ? 'Carregando chamadas...'
+            : total > 0
+            ? `Exibindo ${showingFrom}-${showingTo} de ${total} chamadas`
+            : hasFilters
+            ? 'Nenhuma chamada encontrada para os filtros aplicados.'
+            : 'Nenhuma chamada registrada.'}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePreviousPage}
+            disabled={!canGoPrevious || isLoading}
+            className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Anterior
+          </button>
+          <span className="font-medium text-gray-600">
+            Pagina {total > 0 ? effectivePage : 1} de {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={handleNextPage}
+            disabled={!canGoNext || isLoading}
+            className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Proxima
+          </button>
+        </div>
+      </div>
 
       <Modal
         title={editingAppointmentId ? 'Atualizar call' : 'Nova call'}

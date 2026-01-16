@@ -81,15 +81,16 @@ export default function AppointmentsPage() {
   const canGoPrevious = effectivePage > 1;
   const canGoNext = effectivePage < totalPages && total > 0;
   const hasFilters = Boolean(selectedStatus || searchTerm.trim() || startDate || endDate);
+  const currentPageRef = useRef(currentPage);
 
   const fetchAppointments = useCallback(
     async (options?: { page?: number; status?: string; search?: string; start?: string; end?: string }) => {
-      const pageToFetch = options?.page ?? currentPage;
+      const pageToFetch = options?.page ?? currentPageRef.current ?? 1;
       const statusFilter = options?.status ?? selectedStatus;
       const searchFilter = options?.search ?? searchTerm;
       const startFilter = options?.start ?? startDate;
       const endFilter = options?.end ?? endDate;
-      const previousPage = currentPage;
+      const previousPage = currentPageRef.current ?? 1;
 
       if (pageToFetch !== currentPage) {
         setCurrentPage(pageToFetch);
@@ -119,7 +120,7 @@ export default function AppointmentsPage() {
         setIsLoading(false);
       }
     },
-    [currentPage, selectedStatus, searchTerm, startDate, endDate]
+    [selectedStatus, searchTerm, startDate, endDate]
   );
 
   const fetchLeads = useCallback(
@@ -149,6 +150,10 @@ export default function AppointmentsPage() {
     }, 300);
     return () => clearTimeout(delay);
   }, [leadSearch, fetchLeads, isLeadPickerOpen]);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
 
   useEffect(() => {
     if (hasFetchedInitial.current) {

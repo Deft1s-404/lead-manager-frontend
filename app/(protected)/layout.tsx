@@ -20,7 +20,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       <div className="md:flex md:h-screen">
         <Navbar />
         <main className="px-4 py-6 md:flex-1 md:overflow-y-auto md:px-6 md:py-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
+          <div className="mx-auto max-w-screen-2xl">{children}</div>
         </main>
       </div>
     </div>

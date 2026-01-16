@@ -8,7 +8,9 @@ import { StatusBadge } from '../../../components/StatusBadge';
 import api from '../../../lib/api';
 import { Appointment, Lead } from '../../../types';
 
-type AppointmentStatusOption = 'AGENDADA' | 'NO_SHOW';
+type AppointmentStatusOption = 'AGENDADA' | 'REMARCADO';
+type LeadStageOption = 'NOVO' | 'AGENDOU_CALL' | 'ENTROU_CALL' | 'COMPROU' | 'NO_SHOW';
+type LeadSummary = Pick<Lead, 'id' | 'name' | 'email' | 'contact'>;
 
 interface AppointmentsResponse {
   data: Appointment[];
@@ -21,11 +23,18 @@ interface LeadsResponse {
   data: Lead[];
 }
 
-const statusOptions: AppointmentStatusOption[] = ['AGENDADA', 'NO_SHOW'];
+const statusOptions: AppointmentStatusOption[] = ['AGENDADA', 'REMARCADO'];
 const statusLabels: Record<AppointmentStatusOption, string> = {
   AGENDADA: 'Agendada',
-  NO_SHOW: 'Nao compareceu'
+  REMARCADO: 'Remarcado'
 };
+const leadStageOptions: Array<{ value: LeadStageOption; label: string }> = [
+  { value: 'NOVO', label: 'Novo' },
+  { value: 'AGENDOU_CALL', label: 'Agendou uma call' },
+  { value: 'ENTROU_CALL', label: 'Entrou na call' },
+  { value: 'COMPROU', label: 'Comprou' },
+  { value: 'NO_SHOW', label: 'Não compareceu' }
+];
 const PAGE_SIZE = 20;
 
 const formatDateTime = (value: string) =>
@@ -40,10 +49,14 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadSearch, setLeadSearch] = useState('');
-  const [isLeadsLoading, setIsLeadsLoading] = useState(true);
+  const [isLeadsLoading, setIsLeadsLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const filtersTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -53,8 +66,11 @@ export default function AppointmentsPage() {
     start: '',
     end: '',
     status: 'AGENDADA' as AppointmentStatusOption,
+    leadStage: '' as LeadStageOption | '',
     meetLink: ''
   });
+  const [selectedLeadInfo, setSelectedLeadInfo] = useState<LeadSummary | null>(null);
+  const [isLeadPickerOpen, setIsLeadPickerOpen] = useState(false);
   const [appointmentPendingDeletion, setAppointmentPendingDeletion] = useState<Appointment | null>(null);
   const [isDeletingAppointment, setIsDeletingAppointment] = useState(false);
   const hasFetchedInitial = useRef(false);
@@ -64,12 +80,15 @@ export default function AppointmentsPage() {
   const showingTo = total === 0 ? 0 : Math.min(effectivePage * PAGE_SIZE, total);
   const canGoPrevious = effectivePage > 1;
   const canGoNext = effectivePage < totalPages && total > 0;
-  const hasFilters = Boolean(selectedStatus);
+  const hasFilters = Boolean(selectedStatus || searchTerm.trim() || startDate || endDate);
 
   const fetchAppointments = useCallback(
-    async (options?: { page?: number; status?: string }) => {
+    async (options?: { page?: number; status?: string; search?: string; start?: string; end?: string }) => {
       const pageToFetch = options?.page ?? currentPage;
       const statusFilter = options?.status ?? selectedStatus;
+      const searchFilter = options?.search ?? searchTerm;
+      const startFilter = options?.start ?? startDate;
+      const endFilter = options?.end ?? endDate;
       const previousPage = currentPage;
 
       if (pageToFetch !== currentPage) {
@@ -83,9 +102,11 @@ export default function AppointmentsPage() {
           limit: PAGE_SIZE,
           page: pageToFetch
         };
-        if (statusFilter) {
-          params.status = statusFilter;
-        }
+        if (statusFilter) params.status = statusFilter;
+        const normalizedSearch = searchFilter.trim();
+        if (normalizedSearch) params.search = normalizedSearch;
+        if (startFilter) params.start = startFilter;
+        if (endFilter) params.end = endFilter;
         const response = await api.get<AppointmentsResponse>('/appointments', { params });
         setAppointments(response.data.data);
         setTotal(response.data.total);
@@ -98,23 +119,36 @@ export default function AppointmentsPage() {
         setIsLoading(false);
       }
     },
-    [currentPage, selectedStatus]
+    [currentPage, selectedStatus, searchTerm, startDate, endDate]
   );
 
-  const fetchLeads = async (searchTerm?: string) => {
-    try {
-      setIsLeadsLoading(true);
-      const response = await api.get<LeadsResponse>('/leads', {
-        params: { limit: 50, search: searchTerm || undefined }
-      });
-      setLeads(response.data.data);
-    } catch (e) {
-      console.error('Erro ao buscar leads', e);
-      setLeads([]);
-    } finally {
-      setIsLeadsLoading(false);
+  const fetchLeads = useCallback(
+    async (searchTerm?: string) => {
+      try {
+        setIsLeadsLoading(true);
+        const response = await api.get<LeadsResponse>('/leads', {
+          params: { limit: 50, search: searchTerm || undefined }
+        });
+        setLeads(response.data.data);
+      } catch (e) {
+        console.error('Erro ao buscar leads', e);
+        setLeads([]);
+      } finally {
+        setIsLeadsLoading(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!isLeadPickerOpen) {
+      return;
     }
-  };
+    const delay = setTimeout(() => {
+      fetchLeads(leadSearch.trim() || undefined);
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [leadSearch, fetchLeads, isLeadPickerOpen]);
 
   useEffect(() => {
     if (hasFetchedInitial.current) {
@@ -122,7 +156,6 @@ export default function AppointmentsPage() {
     }
     hasFetchedInitial.current = true;
     fetchAppointments();
-    fetchLeads();
   }, [fetchAppointments]);
 
   const isoToLocalInput = (iso: string) => {
@@ -138,9 +171,11 @@ export default function AppointmentsPage() {
         leadId: appointment.leadId,
         start: isoToLocalInput(appointment.start),
         end: isoToLocalInput(appointment.end),
-        status: appointment.status as AppointmentStatusOption,
+        status: (appointment.status as AppointmentStatusOption) ?? 'AGENDADA',
+        leadStage: (appointment.lead.stage as LeadStageOption) ?? '',
         meetLink: appointment.meetLink ?? ''
       });
+      setSelectedLeadInfo(appointment.lead);
     } else {
       setEditingAppointmentId(null);
       setFormState({
@@ -148,22 +183,37 @@ export default function AppointmentsPage() {
         start: '',
         end: '',
         status: 'AGENDADA',
+        leadStage: '',
         meetLink: ''
       });
+      setSelectedLeadInfo(null);
     }
-    void fetchLeads(leadSearch.trim() || undefined);
     setIsModalOpen(true);
+  };
+
+  const handleLeadSelection = (lead: Lead) => {
+    setFormState((prev) => ({ ...prev, leadId: lead.id }));
+    setSelectedLeadInfo(lead);
+    setIsLeadPickerOpen(false);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const payload = {
+    if (!formState.leadId) {
+      setError('Selecione um lead para a call.');
+      return;
+    }
+    const payload: Record<string, unknown> = {
       leadId: formState.leadId,
       start: new Date(formState.start).toISOString(),
       end: new Date(formState.end).toISOString(),
       status: formState.status,
       meetLink: formState.meetLink || null
     };
+
+    if (editingAppointmentId && formState.leadStage) {
+      payload.leadStage = formState.leadStage;
+    }
 
     try {
       if (editingAppointmentId) {
@@ -172,11 +222,17 @@ export default function AppointmentsPage() {
         await api.post('/appointments', payload);
       }
       setIsModalOpen(false);
-      await fetchAppointments({ page: currentPage, status: selectedStatus });
+      await fetchAppointments({ page: currentPage });
     } catch (e) {
       console.error(e);
       setError('Erro ao salvar call.');
     }
+  };
+
+  const openLeadPicker = () => {
+    setLeadSearch('');
+    setLeads([]);
+    setIsLeadPickerOpen(true);
   };
 
   const requestDeleteAppointment = (appointment: Appointment) => {
@@ -191,7 +247,7 @@ export default function AppointmentsPage() {
       setIsDeletingAppointment(true);
       await api.delete(`/appointments/${appointmentPendingDeletion.id}`);
       setAppointmentPendingDeletion(null);
-      await fetchAppointments({ page: currentPage, status: selectedStatus });
+      await fetchAppointments({ page: currentPage });
     } catch (e) {
       console.error(e);
       setError('Erro ao remover call.');
@@ -207,9 +263,25 @@ export default function AppointmentsPage() {
     setAppointmentPendingDeletion(null);
   };
 
-  const handleLeadSearch = async () => {
-    await fetchLeads(leadSearch.trim() || undefined);
+  const handleClearFilters = () => {
+    setSelectedStatus('');
+    setSearchTerm('');
+    setStartDate('');
+    setEndDate('');
+    fetchAppointments({ page: 1, status: '', search: '', start: '', end: '' });
   };
+
+  useEffect(() => {
+    filtersTimerRef.current && clearTimeout(filtersTimerRef.current);
+    filtersTimerRef.current = setTimeout(() => {
+      fetchAppointments({ page: 1 });
+    }, 400);
+    return () => {
+      if (filtersTimerRef.current) {
+        clearTimeout(filtersTimerRef.current);
+      }
+    };
+  }, [searchTerm, startDate, endDate, selectedStatus, fetchAppointments]);
 
   const handlePageChange = (page: number) => {
     if (page < 1 || page > totalPages || page === currentPage || isLoading) {
@@ -233,35 +305,73 @@ export default function AppointmentsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-screen-2xl mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-slate-900">Video chamadas</h1>
           <p className="text-sm text-gray-500">Agende e acompanhe as chamadas dos leads.</p>
         </div>
-        <div className="flex gap-3">
-          <select
-            value={selectedStatus}
-            onChange={(event) => {
-              const status = event.target.value;
-              setSelectedStatus(status);
-              fetchAppointments({ page: 1, status });
-            }}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
-          >
-            <option value="">Todos os status</option>
-            {statusOptions.map((status) => (
-              <option key={status} value={status}>
-                {statusLabels[status]}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => openModal()}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
-          >
-            Nova call
-          </button>
+        <button
+          onClick={() => openModal()}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
+        >
+          Nova call
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex-1 min-w-[180px] text-xs font-semibold text-gray-600">
+            Buscar por lead ou contato
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Nome, email ou telefone"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            />
+          </label>
+          <label className="text-xs font-semibold text-gray-600">
+            Inicio a partir de
+            <input
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            />
+          </label>
+          <label className="text-xs font-semibold text-gray-600">
+            Fim ate
+            <input
+              type="date"
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            />
+          </label>
+          <label className="text-xs font-semibold text-gray-600">
+            Status
+            <select
+              value={selectedStatus}
+              onChange={(event) => setSelectedStatus(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            >
+              <option value="">Todos os status</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {statusLabels[status]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button
+              onClick={handleClearFilters}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+            >
+              Limpar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -278,36 +388,38 @@ export default function AppointmentsPage() {
               <th className="px-6 py-3">Inicio</th>
               <th className="px-6 py-3">Fim</th>
               <th className="px-6 py-3">Link</th>
+              <th className="px-6 py-3">Agendada</th>
               <th className="px-6 py-3">Status</th>
+              <th className="px-6 py-3">Status do lead</th>
               <th className="px-6 py-3 text-right">Acoes</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-6 py-6 text-center text-gray-500">
+                <td colSpan={9} className="px-6 py-6 text-center text-gray-500">
                   Carregando...
                 </td>
               </tr>
             ) : appointments.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-6 text-center text-gray-500">
+                <td colSpan={9} className="px-6 py-6 text-center text-gray-500">
                   Nenhuma call encontrada.
                 </td>
               </tr>
             ) : (
               appointments.map((appointment) => (
                 <tr key={appointment.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <p className="font-semibold">{appointment.lead.name ?? 'Sem nome'}</p>
                     <p className="text-xs text-gray-400">{appointment.lead.email ?? '--'}</p>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                  <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                     {appointment.lead.contact ?? '--'}
                   </td>
-                  <td className="px-6 py-4">{formatDateTime(appointment.start)}</td>
-                  <td className="px-6 py-4">{formatDateTime(appointment.end)}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.start)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.end)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     {appointment.meetLink ? (
                       <a
                         href={appointment.meetLink}
@@ -321,8 +433,12 @@ export default function AppointmentsPage() {
                       '--'
                     )}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.createdAt)}</td>
                   <td className="px-6 py-4">
                     <StatusBadge value={appointment.status} />
+                  </td>
+                  <td className="px-6 py-4">
+                    {appointment.lead.stage ? <StatusBadge value={appointment.lead.stage} /> : '--'}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
@@ -383,91 +499,72 @@ export default function AppointmentsPage() {
       <Modal
         title={editingAppointmentId ? 'Atualizar call' : 'Nova call'}
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setIsLeadPickerOpen(false);
+        }}
       >
         <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2 space-y-2 text-sm">
-            <label className="block">
-              Buscar lead
-              <div className="mt-1 flex gap-2">
-                <input
-                  type="search"
-                  value={leadSearch}
-                  onChange={(event) => setLeadSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      handleLeadSearch();
-                    }
-                  }}
-                  placeholder="Digite o nome ou contato"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleLeadSearch}
-                  className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-100"
-                >
-                  Buscar
-                </button>
-              </div>
-            </label>
-
-            <label className="block">
-              Lead
-              <select
-                required
-                value={formState.leadId}
-                onChange={(event) => setFormState((prev) => ({ ...prev, leadId: event.target.value }))}
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            <div className="space-y-1 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-semibold uppercase text-gray-500">Lead selecionado</p>
+              {selectedLeadInfo ? (
+                <>
+                  <p className="font-semibold text-gray-900">
+                    {selectedLeadInfo.name ?? selectedLeadInfo.email ?? 'Lead sem nome'}
+                  </p>
+                  <p className="text-xs text-gray-500">{selectedLeadInfo.email ?? '--'}</p>
+                  <p className="text-xs text-gray-500">{selectedLeadInfo.contact ?? '--'}</p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">Nenhum lead selecionado</p>
+              )}
+            </div>
+            {!editingAppointmentId && (
+              <button
+                type="button"
+                onClick={openLeadPicker}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-100"
               >
-                <option value="">Selecione um lead</option>
-                {isLeadsLoading ? (
-                  <option disabled>Carregando leads...</option>
-                ) : leads.length === 0 ? (
-                  <option disabled>Nenhum lead encontrado</option>
-                ) : (
-                  leads.map((lead) => (
-                    <option key={lead.id} value={lead.id}>
-                      {lead.name ?? lead.email ?? 'Lead sem nome'}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
+                {formState.leadId ? 'Trocar lead' : 'Selecionar lead'}
+              </button>
+            )}
           </div>
 
-          <label className="text-sm">
-            Link da call (Google Meet)
-            <input
-              value={formState.meetLink}
-              onChange={(event) => setFormState((prev) => ({ ...prev, meetLink: event.target.value }))}
-              placeholder="https://meet.google.com/..."
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
-            />
-          </label>
+          <div className="text-sm">
+            <label>
+              Link da call (Google Meet)
+              <input
+                value={formState.meetLink}
+                onChange={(event) => setFormState((prev) => ({ ...prev, meetLink: event.target.value }))}
+                placeholder="https://meet.google.com/..."
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+              />
+            </label>
+            <div className="mt-4 grid gap-4">
+              <label className="text-sm">
+                Inicio
+                <input
+                  required
+                  type="datetime-local"
+                  value={formState.start}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, start: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
 
-          <label className="text-sm">
-            Inicio
-            <input
-              required
-              type="datetime-local"
-              value={formState.start}
-              onChange={(event) => setFormState((prev) => ({ ...prev, start: event.target.value }))}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
-            />
-          </label>
-
-          <label className="text-sm">
-            Fim
-            <input
-              required
-              type="datetime-local"
-              value={formState.end}
-              onChange={(event) => setFormState((prev) => ({ ...prev, end: event.target.value }))}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
-            />
-          </label>
+              <label className="text-sm">
+                Fim
+                <input
+                  required
+                  type="datetime-local"
+                  value={formState.end}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, end: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+            </div>
+          </div>
 
           <label className="text-sm md:col-span-2">
             Status
@@ -486,6 +583,26 @@ export default function AppointmentsPage() {
             </select>
           </label>
 
+          {editingAppointmentId && (
+            <label className="text-sm md:col-span-2">
+              Status do lead
+              <select
+                value={formState.leadStage}
+                onChange={(event) =>
+                  setFormState((prev) => ({ ...prev, leadStage: event.target.value as LeadStageOption | '' }))
+                }
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+              >
+                <option value="">Manter status atual</option>
+                {leadStageOptions.map((stage) => (
+                  <option key={stage.value} value={stage.value}>
+                    {stage.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <div className="md:col-span-2">
             <button
               type="submit"
@@ -495,6 +612,44 @@ export default function AppointmentsPage() {
             </button>
           </div>
         </form>
+      </Modal>
+      <Modal title="Selecionar lead" isOpen={isLeadPickerOpen} onClose={() => setIsLeadPickerOpen(false)}>
+        <div className="space-y-4">
+          <label className="block text-sm">
+            Buscar por nome ou contato
+            <input
+              type="search"
+              value={leadSearch}
+              onChange={(event) => setLeadSearch(event.target.value)}
+              placeholder="Ex.: Maria ou 5599999999"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            />
+          </label>
+          {isLeadsLoading ? (
+            <p className="text-sm text-gray-500">Carregando leads...</p>
+          ) : leads.length === 0 ? (
+            <p className="text-sm text-gray-500">Nenhum lead encontrado.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {leads.map((lead) => (
+                <li key={lead.id} className="flex items-center justify-between gap-4 py-2">
+                  <div>
+                    <p className="font-semibold text-gray-900">{lead.name ?? lead.email ?? 'Lead sem nome'}</p>
+                    <p className="text-xs text-gray-500">{lead.email ?? '--'}</p>
+                    <p className="text-xs text-gray-500">{lead.contact ?? '--'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleLeadSelection(lead)}
+                    className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:bg-gray-100"
+                  >
+                    Selecionar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </Modal>
 
       <ConfirmDialog

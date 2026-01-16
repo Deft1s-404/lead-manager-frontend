@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
@@ -17,7 +17,7 @@ export default function RegisterPage() {
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (form.password !== form.confirm) {
-      setError('As senhas não conferem.');
+      setError('As senhas nao conferem.');
       return;
     }
 
@@ -32,7 +32,7 @@ export default function RegisterPage() {
       setDone(true);
       setTimeout(() => router.push('/login'), 1500);
     } catch (err) {
-      setError('Não foi possível criar a conta. Verifique os dados.');
+      setError('Nao foi possivel criar a conta. Verifique os dados.');
     } finally {
       setSubmitting(false);
     }
@@ -74,7 +74,7 @@ export default function RegisterPage() {
           </div>
           <h1 className="mb-2 text-center text-3xl font-semibold text-slate-900">Criar conta</h1>
           <p className="mb-6 text-center text-sm text-gray-500">
-            Preencha os campos para cadastrar um novo usuário e testar o CRM.
+            Cadastre a sua empresa. Depois de acessar o CRM, cadastre os vendedores no menu apropriado.
           </p>
 
           {done ? (
@@ -83,9 +83,7 @@ export default function RegisterPage() {
             </div>
           ) : (
             error && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-                {error}
-              </div>
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">{error}</div>
             )
           )}
 
@@ -97,7 +95,7 @@ export default function RegisterPage() {
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
               className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 focus:border-primary focus:bg-white focus:outline-none"
-              placeholder="Ex.: Maria Silva"
+              placeholder="Ex.: Clinica Exemplo"
             />
           </label>
 
@@ -109,7 +107,7 @@ export default function RegisterPage() {
               value={form.email}
               onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
               className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 focus:border-primary focus:bg-white focus:outline-none"
-              placeholder="voce@exemplo.com"
+              placeholder="empresa@exemplo.com"
             />
           </label>
 
@@ -148,7 +146,7 @@ export default function RegisterPage() {
               </button>
 
               <p className="mt-4 text-center text-xs text-gray-500">
-                Já tem conta?{' '}
+                Ja tem conta?{' '}
                 <Link className="underline" href="/login">
                   Entrar
                 </Link>

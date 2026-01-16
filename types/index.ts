@@ -6,6 +6,12 @@ export interface User {
   apiKey?: string;
 }
 
+export interface AuthenticatedSeller {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -66,10 +72,17 @@ export interface Seller {
   name: string;
   email?: string | null;
   contactNumber?: string | null;
-  availabilityStartDay?: WeekDay | null;
-  availabilityEndDay?: WeekDay | null;
-  availabilityStartTime?: string | null;
-  availabilityEndTime?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SellerAvailabilitySlot {
+  id: string;
+  day: WeekDay;
+  dayOfMonth?: number | null;
+  specificDate?: string | null;
+  startTime: string;
+  endTime: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,6 +101,7 @@ export interface Appointment {
   leadId: string;
   start: string;
   end: string;
+  createdAt: string;
   status: string;
   meetLink?: string | null;
   googleEventId?: string | null;
@@ -96,6 +110,7 @@ export interface Appointment {
     name?: string | null;
     email?: string | null;
     contact?: string | null;
+    stage?: string | null;
   };
 }
 

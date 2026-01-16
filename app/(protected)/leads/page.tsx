@@ -8,7 +8,7 @@ import { StatusBadge } from '../../../components/StatusBadge';
 import api from '../../../lib/api';
 import { Lead } from '../../../types';
 
-type LeadStageOption = 'NOVO' | 'AGENDOU_CALL' | 'ENTROU_CALL' | 'COMPROU';
+type LeadStageOption = 'NOVO' | 'AGENDOU_CALL' | 'ENTROU_CALL' | 'COMPROU' | 'NO_SHOW';
 
 interface LeadsResponse {
   data: Lead[];
@@ -21,7 +21,8 @@ const stageOptions: Array<{ value: LeadStageOption; label: string }> = [
   { value: 'NOVO', label: 'Novo' },
   { value: 'AGENDOU_CALL', label: 'Agendou uma call' },
   { value: 'ENTROU_CALL', label: 'Entrou na call' },
-  { value: 'COMPROU', label: 'Comprou' }
+  { value: 'COMPROU', label: 'Comprou' },
+  { value: 'NO_SHOW', label: 'Não compareceu' }
 ];
 
 const PAGE_SIZE = 50;
@@ -180,10 +181,21 @@ export default function LeadsPage() {
 
   const handleRefresh = () => {
     const nextPage = isSearchDirty ? 1 : effectivePage;
+    const searchTerm = isSearchDirty ? search : lastFetchedSearch;
     fetchLeads({
       page: nextPage,
-      searchTerm: isSearchDirty ? search : lastFetchedSearch
+      searchTerm,
+      stage: selectedStage,
+      source: selectedSource
     });
+  };
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setSelectedStage('');
+    setSelectedSource('');
+    setLastFetchedSearch('');
+    fetchLeads({ page: 1, searchTerm: '', stage: '', source: '' });
   };
 
   const openModal = (lead?: Lead) => {
@@ -298,62 +310,85 @@ export default function LeadsPage() {
           <h1 className="text-3xl font-semibold text-slate-900">Leads e Funil</h1>
           <p className="text-sm text-gray-500">Controle o funil comercial e qualifique os leads.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="search"
-            placeholder="Buscar lead ou origem..."
-            value={search}
-            onChange={handleSearchChange}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                handleRefresh();
-              }
-            }}
-            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm shadow-sm focus:border-primary focus:outline-none"
-          />
-          <select
-            value={selectedStage}
-            onChange={handleStageChange}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
-          >
-            <option value="">Todos os estagios</option>
-            {stageOptions.map((stage) => (
-              <option key={stage.value} value={stage.value}>
-                {stage.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedSource}
-            onChange={handleSourceChange}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
-          >
-            <option value="">Todas as origens</option>
-            <option value="instagram">Instagram</option>
-            <option value="facebook">Facebook</option>
-            <option value="indicacao">Indicacao</option>
-            <option value="site">Site</option>
-            <option value="whatsapp">WhatsApp</option>
-          </select>
-          <button
-            onClick={handleRefresh}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
-          >
-            Atualizar
-          </button>
-          <button
-            onClick={handleExportCsv}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
-          >
-            Exportar CSV
-          </button>
-          <button
-            onClick={() => openModal()}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
-          >
-            Novo Lead
-          </button>
+        <button
+          onClick={() => openModal()}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
+        >
+          Novo Lead
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex-1 min-w-[220px] text-xs font-semibold text-gray-600">
+            Buscar lead ou origem
+            <input
+              type="search"
+              placeholder="Nome, email ou origem"
+              value={search}
+              onChange={handleSearchChange}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleRefresh();
+                }
+              }}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <label className="text-xs font-semibold text-gray-600">
+            Estágio
+            <select
+              value={selectedStage}
+              onChange={handleStageChange}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            >
+              <option value="">Todos os estágios</option>
+              {stageOptions.map((stage) => (
+                <option key={stage.value} value={stage.value}>
+                  {stage.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-xs font-semibold text-gray-600">
+            Origem
+            <select
+              value={selectedSource}
+              onChange={handleSourceChange}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            >
+              <option value="">Todas as origens</option>
+              <option value="instagram">Instagram</option>
+              <option value="facebook">Facebook</option>
+              <option value="indicacao">Indicação</option>
+              <option value="site">Site</option>
+              <option value="whatsapp">WhatsApp</option>
+            </select>
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleRefresh}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+            >
+              Atualizar
+            </button>
+            <button
+              onClick={handleExportCsv}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+            >
+              Exportar CSV
+            </button>
+            <button
+              onClick={handleClearFilters}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+            >
+              Limpar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -369,8 +404,9 @@ export default function LeadsPage() {
             <tr>
               <th className="px-6 py-3">Contato</th>
               <th className="px-6 py-3">Origem</th>
+              <th className="px-6 py-3">Cadastrado em</th>
               <th className="px-6 py-3">Notas</th>
-              <th className="px-6 py-3">Estagio</th>
+              <th className="px-6 py-3">Status</th>
               <th className="px-6 py-3 text-right">Acoes</th>
             </tr>
           </thead>
@@ -396,6 +432,13 @@ export default function LeadsPage() {
                     <p className="text-xs text-gray-400">{lead.contact ?? '--'}</p>
                   </td>
                   <td className="px-6 py-4">{lead.source ?? '--'}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {new Date(lead.createdAt).toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric'
+                    })}
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-500">{lead.notes ?? '--'}</td>
                   <td className="px-6 py-4">
                     <StatusBadge value={lead.stage} />
@@ -510,7 +553,7 @@ export default function LeadsPage() {
           </label>
 
           <label className="text-sm">
-            Estagio
+            Status
             <select
               value={formState.stage}
               onChange={(event) =>

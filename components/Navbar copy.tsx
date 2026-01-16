@@ -16,7 +16,8 @@ type IconName =
   | 'calendar'
   | 'megaphone'
   | 'puzzle'
-  | 'chart';
+  | 'chart'
+  | 'clock';
 
 type LinkItem = { href: string; label: string; icon: IconName };
 
@@ -95,24 +96,50 @@ function Icon({ name, className }: { name: IconName; className?: string }) {
           <path d="M4 20V6M10 20V10M16 20v-7M21 20H3" />
         </svg>
       );
+    case 'clock':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 8v4l2.5 2.5" />
+        </svg>
+      );
     default:
       return null;
   }
 }
 
+const AccountDetails = ({
+  label,
+  name,
+  email
+}: {
+  label: string;
+  name?: string | null;
+  email?: string | null;
+}) => (
+  <div>
+    <p className="text-[11px] uppercase text-gray-400">{label}</p>
+    <p className="font-semibold text-gray-700">{name ?? '—'}</p>
+    <p className="text-gray-400">{email ?? '—'}</p>
+  </div>
+);
+
 export const Navbar = () => {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, seller, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navigationLinks = useMemo(() => {
-    if (user?.role !== 'ADMIN') {
-      return links.filter((link) => link.href !== '/integrations');
-    }
-
-    return links;
-  }, [user?.role]);
+    const base =
+      user?.role !== 'ADMIN' ? links.filter((link) => link.href !== '/integrations') : [...links];
+    base.push({
+      href: '/attendance',
+      label: seller ? 'Atendimento' : 'Agenda dos vendedores',
+      icon: 'clock'
+    });
+    return base;
+  }, [seller, user?.role]);
 
   const handleLogout = () => {
     if (isLoggingOut) return;
@@ -181,9 +208,13 @@ export const Navbar = () => {
           </nav>
 
           <div className="mt-auto border-t px-4 py-4">
-            <div className="mb-3 text-xs">
-              <p className="font-semibold text-gray-700">{user?.name}</p>
-              <p className="text-gray-400">{user?.email}</p>
+            <div className="mb-3 text-xs space-y-3">
+              <AccountDetails label="Empresa" name={user?.name} email={user?.email} />
+              {seller && (
+                <div className="border-t border-dashed border-gray-200 pt-2">
+                  <AccountDetails label="Vendedor" name={seller.name} email={seller.email} />
+                </div>
+              )}
             </div>
             <button
               onClick={handleLogout}
@@ -227,9 +258,13 @@ export const Navbar = () => {
         </nav>
 
         <div className="mt-auto border-t px-4 py-4">
-          <div className="mb-3 text-xs">
-            <p className="font-semibold text-gray-700">{user?.name}</p>
-            <p className="text-gray-400">{user?.email}</p>
+          <div className="mb-3 text-xs space-y-3">
+            <AccountDetails label="Empresa" name={user?.name} email={user?.email} />
+            {seller && (
+              <div className="border-t border-dashed border-gray-200 pt-2">
+                <AccountDetails label="Vendedor" name={seller.name} email={seller.email} />
+              </div>
+            )}
           </div>
           <button
             onClick={handleLogout}

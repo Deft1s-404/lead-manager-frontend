@@ -1,11 +1,13 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
 import api from '../../../lib/api';
-import { Seller, WeekDay } from '../../../types';
+import { Seller } from '../../../types';
+import { useAuth } from '../../../hooks/useAuth';
 
 interface SellersResponse {
   data: Seller[];
@@ -16,74 +18,9 @@ interface SellersResponse {
 
 const PAGE_SIZE = 50;
 
-const weekDayOptions: Array<{ value: WeekDay; label: string; short: string }> = [
-  { value: 'MONDAY', label: 'Segunda-feira', short: 'Seg' },
-  { value: 'TUESDAY', label: 'Terca-feira', short: 'Ter' },
-  { value: 'WEDNESDAY', label: 'Quarta-feira', short: 'Qua' },
-  { value: 'THURSDAY', label: 'Quinta-feira', short: 'Qui' },
-  { value: 'FRIDAY', label: 'Sexta-feira', short: 'Sex' },
-  { value: 'SATURDAY', label: 'Sabado', short: 'Sab' },
-  { value: 'SUNDAY', label: 'Domingo', short: 'Dom' }
-];
-
-const weekDayShortLabel: Record<WeekDay, string> = weekDayOptions.reduce(
-  (acc, option) => {
-    acc[option.value] = option.short;
-    return acc;
-  },
-  {} as Record<WeekDay, string>
-);
-
-const formatDayRange = (start?: WeekDay | null, end?: WeekDay | null): string | null => {
-  const startLabel = start ? weekDayShortLabel[start] : null;
-  const endLabel = end ? weekDayShortLabel[end] : null;
-
-  if (!startLabel && !endLabel) {
-    return null;
-  }
-
-  if (startLabel && endLabel) {
-    return start === end ? startLabel : `${startLabel} a ${endLabel}`;
-  }
-
-  return startLabel ?? endLabel;
-};
-
-const formatTimeRange = (start?: string | null, end?: string | null): string | null => {
-  const hasStart = Boolean(start);
-  const hasEnd = Boolean(end);
-
-  if (!hasStart && !hasEnd) {
-    return null;
-  }
-
-  if (hasStart && hasEnd) {
-    return `de ${start} as ${end}`;
-  }
-
-  if (hasStart) {
-    return `a partir de ${start}`;
-  }
-
-  return `ate ${end}`;
-};
-
-const formatAvailabilityWindow = (seller: Seller): string => {
-  const dayPart = formatDayRange(seller.availabilityStartDay, seller.availabilityEndDay);
-  const timePart = formatTimeRange(seller.availabilityStartTime, seller.availabilityEndTime);
-
-  if (!dayPart && !timePart) {
-    return '--';
-  }
-
-  if (dayPart && timePart) {
-    return `${dayPart} ${timePart}`;
-  }
-
-  return dayPart ?? timePart ?? '--';
-};
-
 export default function SellersPage() {
+  const router = useRouter();
+  const { seller: loggedSeller, loading: authLoading } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -95,11 +32,7 @@ export default function SellersPage() {
   const [formState, setFormState] = useState({
     name: '',
     email: '',
-    contactNumber: '',
-    availabilityStartDay: '',
-    availabilityEndDay: '',
-    availabilityStartTime: '',
-    availabilityEndTime: ''
+    contactNumber: ''
   });
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null);
   const [sellerPendingDeletion, setSellerPendingDeletion] = useState<Seller | null>(null);
@@ -165,12 +98,19 @@ export default function SellersPage() {
   );
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+    if (loggedSeller) {
+      router.replace('/dashboard');
+      return;
+    }
     if (hasFetchedInitial.current) {
       return;
     }
     hasFetchedInitial.current = true;
     fetchSellers();
-  }, [fetchSellers]);
+  }, [authLoading, loggedSeller, fetchSellers, router]);
 
   useEffect(() => {
     if (!isSearchDirty) {
@@ -187,6 +127,19 @@ export default function SellersPage() {
     setSearch(event.target.value);
     setError(null);
     setIsLoading(true);
+  };
+
+  const handleRefresh = () => {
+    fetchSellers({
+      page: isSearchDirty ? 1 : effectivePage,
+      searchTerm: isSearchDirty ? search : lastFetchedSearch
+    });
+  };
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setLastFetchedSearch('');
+    fetchSellers({ page: 1, searchTerm: '' });
   };
 
   const handlePageChange = (page: number) => {
@@ -219,22 +172,14 @@ export default function SellersPage() {
       setFormState({
         name: seller.name,
         email: seller.email ?? '',
-        contactNumber: seller.contactNumber ?? '',
-        availabilityStartDay: seller.availabilityStartDay ?? '',
-        availabilityEndDay: seller.availabilityEndDay ?? '',
-        availabilityStartTime: seller.availabilityStartTime ?? '',
-        availabilityEndTime: seller.availabilityEndTime ?? ''
+        contactNumber: seller.contactNumber ?? ''
       });
     } else {
       setEditingSellerId(null);
       setFormState({
         name: '',
         email: '',
-        contactNumber: '',
-        availabilityStartDay: '',
-        availabilityEndDay: '',
-        availabilityStartTime: '',
-        availabilityEndTime: ''
+        contactNumber: ''
       });
     }
     setIsModalOpen(true);
@@ -244,26 +189,10 @@ export default function SellersPage() {
     event.preventDefault();
     try {
       setError(null);
-      const normalizeDay = (value: string): WeekDay | null | undefined => {
-        if (!value) {
-          return editingSellerId ? null : undefined;
-        }
-        return value as WeekDay;
-      };
-      const normalizeTime = (value: string) => {
-        if (!value) {
-          return editingSellerId ? null : undefined;
-        }
-        return value;
-      };
       const payload = {
         name: formState.name,
         email: formState.email || undefined,
-        contactNumber: formState.contactNumber || undefined,
-        availabilityStartDay: normalizeDay(formState.availabilityStartDay),
-        availabilityEndDay: normalizeDay(formState.availabilityEndDay),
-        availabilityStartTime: normalizeTime(formState.availabilityStartTime),
-        availabilityEndTime: normalizeTime(formState.availabilityEndTime)
+        contactNumber: formState.contactNumber || undefined
       };
       if (editingSellerId) {
         await api.patch(`/sellers/${editingSellerId}`, payload);
@@ -325,6 +254,10 @@ export default function SellersPage() {
     }
   };
 
+  if (authLoading || loggedSeller) {
+    return null;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -334,40 +267,47 @@ export default function SellersPage() {
             Cadastre e organize os vendedores que auxiliam no atendimento comercial.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="search"
-            placeholder="Buscar vendedor..."
-            value={search}
-            onChange={handleSearchChange}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                fetchSellers({
-                  page: 1,
-                  searchTerm: search
-                });
-              }
-            }}
-            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm shadow-sm focus:border-primary focus:outline-none"
-          />
-          <button
-            onClick={() =>
-              fetchSellers({
-                page: 1,
-                searchTerm: isSearchDirty ? search : lastFetchedSearch
-              })
-            }
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
-          >
-            Atualizar
-          </button>
-          <button
-            onClick={() => openModal()}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
-          >
-            Novo vendedor
-          </button>
+        <button
+          onClick={() => openModal()}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
+        >
+          Novo vendedor
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex-1 min-w-[220px] text-xs font-semibold text-gray-600">
+            Buscar vendedor
+            <input
+              type="search"
+              placeholder="Nome ou email"
+              value={search}
+              onChange={handleSearchChange}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleRefresh();
+                }
+              }}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleRefresh}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+            >
+              Atualizar
+            </button>
+            <button
+              onClick={handleClearFilters}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+            >
+              Limpar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -382,7 +322,6 @@ export default function SellersPage() {
               <th className="px-6 py-3">Nome</th>
               <th className="px-6 py-3">Email</th>
               <th className="px-6 py-3">Contato</th>
-              <th className="px-6 py-3">Janela de atendimento</th>
               <th className="px-6 py-3">Cadastro</th>
               <th className="px-6 py-3 text-right">Acoes</th>
             </tr>
@@ -390,13 +329,13 @@ export default function SellersPage() {
           <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
             {isLoading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-6 text-center text-gray-500">
+                <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
                   Carregando vendedores...
                 </td>
               </tr>
             ) : sellers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-6 text-center text-gray-500">
+                <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
                   Nenhum vendedor encontrado.
                 </td>
               </tr>
@@ -411,9 +350,6 @@ export default function SellersPage() {
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-sm text-gray-500">{seller.contactNumber ?? '--'}</p>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {formatAvailabilityWindow(seller)}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">{formatDate(seller.createdAt)}</td>
                   <td className="px-6 py-4 text-right">
@@ -502,66 +438,6 @@ export default function SellersPage() {
               value={formState.contactNumber}
               onChange={(event) => setFormState((prev) => ({ ...prev, contactNumber: event.target.value }))}
               placeholder="WhatsApp ou telefone"
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
-            />
-          </label>
-
-          <label className="text-sm">
-            Dia inicial do atendimento
-            <select
-              value={formState.availabilityStartDay}
-              onChange={(event) =>
-                setFormState((prev) => ({ ...prev, availabilityStartDay: event.target.value }))
-              }
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
-            >
-              <option value="">Selecione o dia</option>
-              {weekDayOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-sm">
-            Horario inicial
-            <input
-              type="time"
-              value={formState.availabilityStartTime}
-              onChange={(event) =>
-                setFormState((prev) => ({ ...prev, availabilityStartTime: event.target.value }))
-              }
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
-            />
-          </label>
-
-          <label className="text-sm">
-            Dia final do atendimento
-            <select
-              value={formState.availabilityEndDay}
-              onChange={(event) =>
-                setFormState((prev) => ({ ...prev, availabilityEndDay: event.target.value }))
-              }
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
-            >
-              <option value="">Selecione o dia</option>
-              {weekDayOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-sm">
-            Horario final
-            <input
-              type="time"
-              value={formState.availabilityEndTime}
-              onChange={(event) =>
-                setFormState((prev) => ({ ...prev, availabilityEndTime: event.target.value }))
-              }
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
             />
           </label>

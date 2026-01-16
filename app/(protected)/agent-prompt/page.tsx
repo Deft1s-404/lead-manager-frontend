@@ -1,14 +1,18 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import api from '../../../lib/api';
+import { useAuth } from '../../../hooks/useAuth';
 
 interface AgentPromptResponse {
   prompt: string;
 }
 
 export default function AgentPromptPage() {
+  const router = useRouter();
+  const { seller, loading: authLoading } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [savedPrompt, setSavedPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +21,13 @@ export default function AgentPromptPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+    if (seller) {
+      router.replace('/dashboard');
+      return;
+    }
     let isMounted = true;
     setIsLoading(true);
     api
@@ -39,7 +50,7 @@ export default function AgentPromptPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [authLoading, seller, router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,6 +74,10 @@ export default function AgentPromptPage() {
   };
 
   const isDirty = prompt !== savedPrompt;
+
+  if (authLoading || seller) {
+    return null;
+  }
 
   return (
     <div className="space-y-6">

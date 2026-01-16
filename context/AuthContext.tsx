@@ -5,15 +5,29 @@ import { useRouter } from 'next/navigation';
 
 import api from '../lib/api';
 import { clearStoredAuth, getStoredAuth, setStoredAuth, StoredAuth } from '../lib/auth-storage';
-import { User } from '../types';
+import { AuthenticatedSeller, User } from '../types';
 
 interface AuthContextValue {
   user: User | null;
+  seller: AuthenticatedSeller | null;
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
+
+type LoginSuccessResponse = {
+  accessToken: string;
+  user: User;
+  seller: AuthenticatedSeller | null;
+  requiresPasswordChange?: false;
+};
+
+type LoginRequiresPasswordChangeResponse = {
+  requiresPasswordChange: true;
+  passwordSetupToken: string;
+  seller: AuthenticatedSeller;
+};
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -32,13 +46,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const { data } = await api.post<{ accessToken: string; user: User }>('/auth/login', {
+      const { data } = await api.post<LoginSuccessResponse | LoginRequiresPasswordChangeResponse>('/auth/login', {
         email,
         password
       });
 
-      setStoredAuth(data.accessToken, data.user);
-      setAuthState({ token: data.accessToken, user: data.user });
+      if ('requiresPasswordChange' in data && data.requiresPasswordChange) {
+        const searchParams = new URLSearchParams({
+          token: data.passwordSetupToken,
+          email: data.seller.email,
+          name: data.seller.name
+        });
+        router.push(`/first-access?${searchParams.toString()}`);
+        return;
+      }
+
+      setStoredAuth(data.accessToken, data.user, data.seller);
+      setAuthState({ token: data.accessToken, user: data.user, seller: data.seller });
       router.push('/dashboard');
     },
     [router]
@@ -53,6 +77,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const value: AuthContextValue = useMemo(
     () => ({
       user: authState?.user ?? null,
+      seller: authState?.seller ?? null,
       token: authState?.token ?? null,
       loading,
       login,

@@ -42,7 +42,8 @@ const formatDateTime = (value: string) =>
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: 'UTC'
   });
 
 export default function AppointmentsPage() {
@@ -163,11 +164,7 @@ export default function AppointmentsPage() {
     fetchAppointments();
   }, [fetchAppointments]);
 
-  const isoToLocalInput = (iso: string) => {
-    const d = new Date(iso);
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 16);
-  };
+  const isoToLocalInput = (iso: string) => new Date(iso).toISOString().slice(0, 16);
 
   const openModal = (appointment?: Appointment) => {
     if (appointment) {

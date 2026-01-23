@@ -43,7 +43,7 @@ const formatDateTime = (value: string) =>
     month: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'UTC'
+    timeZone: 'America/Sao_Paulo'
   });
 
 export default function AppointmentsPage() {
@@ -470,10 +470,10 @@ export default function AppointmentsPage() {
           {isLoading
             ? 'Carregando chamadas...'
             : total > 0
-            ? `Exibindo ${showingFrom}-${showingTo} de ${total} chamadas`
-            : hasFilters
-            ? 'Nenhuma chamada encontrada para os filtros aplicados.'
-            : 'Nenhuma chamada registrada.'}
+              ? `Exibindo ${showingFrom}-${showingTo} de ${total} chamadas`
+              : hasFilters
+                ? 'Nenhuma chamada encontrada para os filtros aplicados.'
+                : 'Nenhuma chamada registrada.'}
         </p>
         <div className="flex items-center gap-2">
           <button
